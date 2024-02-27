@@ -1,7 +1,3 @@
-# PaperMC Plugin with Kotlin Template
+# GUILib
 
-Kotlin + Gradle kts
-
-# How to Build
-
-```./gradlew shadowJar```
+PaperMC Plugin that gives you the way to create GUIs with ease.
