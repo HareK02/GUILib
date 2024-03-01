@@ -1,6 +1,5 @@
 package net.hareworks.guilib
 
-import com.destroystokyo.paper.event.player.PlayerJumpEvent
 import io.papermc.paper.event.player.PrePlayerAttackEntityEvent
 import java.time.Duration
 import net.kyori.adventure.key.Key
@@ -36,44 +35,12 @@ class GuiLib : JavaPlugin(), Listener {
     lateinit var instance: GuiLib
     val instances: HashMap<Player, GUI> = HashMap()
     val locationcash: HashMap<Player, Location> = HashMap()
-    val cooldown = HashMap<Player, Int>()
   }
 
   val ticker =
       object : BukkitRunnable() {
         override fun run() {
-          instances.forEach { (player, gui) ->
-            val from = locationcash[player]
-            if (from != null && (cooldown[player] == 0 || cooldown[player] == null)) {
-              val to = Location(player.location)
-              var a = to - from
-              val amount = Math.sqrt(a.x * a.x + a.z * a.z)
-              locationcash[player] = to
-              if (amount > 0.05) {
-                var degree = Math.toDegrees(Math.atan2(-a.x, a.z)) - player.location.yaw
-                if (degree > 180) degree -= 360
-                if (degree < -180) degree += 360
-                when (degree) {
-                  in -45.0..45.0 -> gui.moveUp()
-                  in 45.0..135.0 -> gui.moveRight()
-                  in -135.0..-45.0 -> gui.moveLeft()
-                  in 135.0..180.0, in -180.0..-135.0 -> gui.moveDown()
-                }
-                cooldown[player] = 3
-              }
-
-              if (!gui.capture) {
-                if (a.yaw > 180) a.yaw -= 360
-                if (a.yaw < -180) a.yaw += 360
-                if (a.pitch > 180) a.pitch -= 360
-                if (a.pitch < -180) a.pitch += 360
-                if (!(a.yaw in -1.0..1.0 && a.pitch in -1.0..1.0))
-                    gui.moveCursor(a.yaw.toInt(), a.pitch.toInt())
-              }
-            }
-            if (cooldown[player] != 0) cooldown[player] = cooldown[player]!! - 1
-            gui.update()
-          }
+          instances.forEach { (_, gui) -> gui.update() }
         }
       }
   override fun onEnable() {
@@ -95,30 +62,47 @@ class GuiLib : JavaPlugin(), Listener {
   public fun onPlayerLeave(e: org.bukkit.event.player.PlayerQuitEvent) {
     instances.remove(e.player)
     locationcash.remove(e.player)
-    cooldown.remove(e.player)
   }
 
   @EventHandler
   public fun onPlayerInteract(e: PlayerInteractEvent) {
     val a = e.getAction()
     when (a) {
-      Action.LEFT_CLICK_AIR, Action.LEFT_CLICK_BLOCK -> this.onLeftClick(e.player)
-      Action.RIGHT_CLICK_AIR, Action.RIGHT_CLICK_BLOCK -> this.onRightClick(e.player)
+      Action.LEFT_CLICK_AIR, Action.LEFT_CLICK_BLOCK ->
+          if (this.onLeftClick(e.player)) e.isCancelled = true
+      Action.RIGHT_CLICK_AIR, Action.RIGHT_CLICK_BLOCK ->
+          if (this.onRightClick(e.player)) e.isCancelled = true
       else -> {}
     }
   }
   @EventHandler
   public fun onPlayerInteractEntity(e: PlayerInteractEntityEvent) {
-    this.onRightClick(e.player)
+    if (this.onRightClick(e.player)) e.isCancelled = true
   }
   @EventHandler
   public fun onPrePlayerAttackEntity(e: PrePlayerAttackEntityEvent) {
-    this.onLeftClick(e.player)
+    if (this.onLeftClick(e.player)) e.isCancelled = true
+  }
+  @EventHandler
+  public fun onPlayerThrowItem(e: org.bukkit.event.player.PlayerDropItemEvent) {
+    if (instances.containsKey(e.player)) e.isCancelled = true
+  }
+  @EventHandler
+  public fun onInventoryClick(e: org.bukkit.event.inventory.InventoryClickEvent) {
+    if (instances.containsKey(e.whoClicked)) {
+      if (e.slot == 4) {
+        e.isCancelled = true
+      }
+    }
+  }
+  @EventHandler
+  public fun onPlayerItemHeld(e: org.bukkit.event.player.PlayerItemHeldEvent) {
+    if (this.onScroll(e.player, e.newSlot - e.previousSlot)) e.isCancelled = true
   }
 
   private val lmap = HashMap<Player, BukkitRunnable>()
-  private fun onLeftClick(player: Player) {
-    if (lmap.containsKey(player)) return
+  private fun onLeftClick(player: Player): Boolean {
+    if (lmap.containsKey(player)) return false
     lmap.put(
         player,
         object : BukkitRunnable() {
@@ -130,12 +114,13 @@ class GuiLib : JavaPlugin(), Listener {
     )
     if (instances.containsKey(player)) {
       instances[player]!!.leftClick()
+      return true
     }
+    return false
   }
-
   private val rmap = HashMap<Player, BukkitRunnable>()
-  private fun onRightClick(player: Player) {
-    if (rmap.containsKey(player)) return
+  private fun onRightClick(player: Player): Boolean {
+    if (rmap.containsKey(player)) return false
     rmap.put(
         player,
         object : BukkitRunnable() {
@@ -147,15 +132,17 @@ class GuiLib : JavaPlugin(), Listener {
     )
     if (instances.containsKey(player)) {
       instances[player]!!.rightClick()
+      return true
     }
+    return false
   }
 
-  @EventHandler
-  public fun onPlayerJump(e: PlayerJumpEvent) {
-    if (instances.containsKey(e.player)) {
-      e.isCancelled = true
-      instances[e.player]!!.enter()
+  private fun onScroll(player: Player, up: Int): Boolean {
+    if (instances.containsKey(player)) {
+      instances[player]!!.scroll(up > 0)
+      return true
     }
+    return false
   }
 
   @EventHandler
@@ -169,7 +156,21 @@ class GuiLib : JavaPlugin(), Listener {
 
 abstract class GUI(val player: Player) {
   var capture = false
-  var cursor = Pair(0, 0)
+  var cursor = Pair(0, 0) // x, y
+  val heldItem = player.inventory.getItem(4)
+  val heldSlot = player.inventory.heldItemSlot
+  init {
+    player.inventory.heldItemSlot = 4
+    player.inventory.setItemInMainHand(
+        org.bukkit.inventory.ItemStack(org.bukkit.Material.STICK).apply {
+          itemMeta =
+              itemMeta.apply {
+                displayName(Component.text(" "))
+                setCustomModelData(7201)
+              }
+        }
+    )
+  }
 
   private fun sendActionBar(text: Component) {
     player.sendActionBar(text)
@@ -196,33 +197,17 @@ abstract class GUI(val player: Player) {
     cursor = Pair(cursor.first + x, cursor.second + y)
   }
 
-  public fun leftClick() {
-    player.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 1.2f))
-  }
-  public fun rightClick() {
-    player.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 1.2f))
-  }
-  public fun moveLeft() {
-    player.sendActionBar(Component.text("moveLeft"))
-    player.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 1.2f))
-  }
-  public fun moveRight() {
-    player.sendActionBar(Component.text("moveRight"))
-    player.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 1.2f))
-  }
-  public fun moveUp() {
-    player.sendActionBar(Component.text("moveUp"))
-    player.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 1.2f))
-  }
-  public fun moveDown() {
-    player.sendActionBar(Component.text("moveDown"))
-    player.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 1.2f))
-  }
+  abstract fun leftClick()
+  abstract fun rightClick()
+  abstract fun scroll(up: Boolean)
+
   public fun enter() {
     player.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 1.2f))
   }
   public fun quit() {
     player.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 1.2f))
+    player.inventory.setItemInMainHand(heldItem)
+    player.inventory.heldItemSlot = heldSlot
     GuiLib.instances.remove(player)
   }
 }
@@ -230,40 +215,79 @@ abstract class GUI(val player: Player) {
 class TestGUI(player: Player) : GUI(player) {
   var bool1 = true
   var number1 = 0
-  val window =
-      CUIBuilder(pos = Pair(-80, -40)).apply {
-        components.apply {
-          add(Component("TestGUI ").apply { bold = true })
-          add(Component("v1.0.0").apply { color = NamedTextColor.GRAY })
-          add(NewLine())
-          add(Component(" Button1 "))
-          add(
-              Button(Ref({ bool1 }, { bool1 = it })).apply {
-                bold = true
-                length = 6
-                position = Element.Position.CENTER
-              }
-          )
-          add(NewLine())
-          add(Component(" Number1 "))
-          add(
-              NumberField(Ref({ number1 }, { number1 = it })).apply {
-                bold = true
-                length = 6
-                position = Element.Position.CENTER
-              }
-          )
-        }
+  var builder: Builder =
+      Builder(Vec2(0, 0)).apply {
+        append(CUIComponentElement("|"))
+        append(
+            CUIComponentElement("GUILib!").apply {
+              width = 16
+              position = CUIComponent.Position.LEFT
+            }
+        )
+        append(CUIComponentElement("|"))
+        append(NewLine())
+        append(CUIComponentElement("|"))
+        append(
+            CUIComponentElement("GUILib!").apply {
+              width = 16
+              position = CUIComponent.Position.CENTER
+            }
+        )
+        append(CUIComponentElement("|"))
+        append(NewLine())
+        append(CUIComponentElement("|"))
+        append(
+            CUIComponentElement("GUILib!").apply {
+              width = 16
+              position = CUIComponent.Position.RIGHT
+            }
+        )
+        append(CUIComponentElement("|"))
+        append(NewLine())
+        append(CUIComponentElement("|"))
+        append(
+            CUIComponentElement("Smart & Powerful Library!!").apply {
+              width = 16
+              color = NamedTextColor.GREEN
+              position = CUIComponent.Position.LEFT
+            }
+        )
+        append(CUIComponentElement("|"))
+        append(NewLine())
+        append(CUIComponentElement("|"))
+        append(
+            CUIComponentElement("Smart & Powerful Library!!").apply {
+              width = 16
+              color = NamedTextColor.GREEN
+              position = CUIComponent.Position.CENTER
+            }
+        )
+        append(CUIComponentElement("|"))
+        append(NewLine())
+        append(CUIComponentElement("|"))
+        append(
+            CUIComponentElement("Smart & Powerful Library!!").apply {
+              width = 16
+              color = NamedTextColor.GREEN
+              position = CUIComponent.Position.RIGHT
+            }
+        )
+        append(CUIComponentElement("|"))
       }
 
   init {
     GuiLib.instances[player] = this
-    GuiLib.locationcash[player] = Location(player.location)
   }
 
   override fun render(): Component {
-    return window.render()
+    return builder.build()
   }
+
+  override fun leftClick() {}
+
+  override fun rightClick() {}
+
+  override fun scroll(up: Boolean) {}
 }
 
 class Ref<T>(private val get: () -> T, private val set: (value: T) -> Unit) {
