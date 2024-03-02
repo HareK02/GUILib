@@ -155,8 +155,6 @@ class GuiLib : JavaPlugin(), Listener {
 }
 
 abstract class GUI(val player: Player) {
-  var capture = false
-  var cursor = Pair(0, 0) // x, y
   val heldItem = player.inventory.getItem(4)
   val heldSlot = player.inventory.heldItemSlot
   init {
@@ -186,16 +184,6 @@ abstract class GUI(val player: Player) {
     player.showTitle(title)
   }
   abstract fun render(): Component
-
-  public fun capture() {
-    capture = true
-  }
-  public fun release() {
-    capture = false
-  }
-  public fun moveCursor(x: Int, y: Int) {
-    cursor = Pair(cursor.first + x, cursor.second + y)
-  }
 
   abstract fun leftClick()
   abstract fun rightClick()
