@@ -5,8 +5,8 @@ import java.time.Duration
 import net.kyori.adventure.key.Key
 import net.kyori.adventure.sound.Sound
 import net.kyori.adventure.text.Component
-import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.title.Title
+import org.bukkit.Material
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
@@ -14,42 +14,54 @@ import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerToggleSneakEvent
+import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.scheduler.BukkitRunnable
 
-data class Location(var x: Double, var y: Double, var z: Double, var yaw: Float, var pitch: Float) {
-  operator fun minus(other: Location): Location {
-    return Location(x - other.x, y - other.y, z - other.z, yaw - other.yaw, pitch - other.pitch)
-  }
-  operator fun plus(other: Location): Location {
-    return Location(x + other.x, y + other.y, z + other.z, yaw + other.yaw, pitch + other.pitch)
-  }
-
-  constructor(
-      location: org.bukkit.Location
-  ) : this(location.x, location.y, location.z, location.yaw, location.pitch)
-}
-
 class GuiLib : JavaPlugin(), Listener {
   companion object {
-    lateinit var instance: GuiLib
-    val instances: HashMap<Player, GUI> = HashMap()
-    val locationcash: HashMap<Player, Location> = HashMap()
+    internal lateinit var instance: GuiLib
   }
 
-  val ticker =
+  private val ticker =
       object : BukkitRunnable() {
         override fun run() {
-          instances.forEach { (_, gui) -> gui.update() }
+          GUI.instances.forEach { (_, gui) -> gui.update() }
         }
       }
   override fun onEnable() {
     instance = this
     server.pluginManager.registerEvents(this, this)
     ticker.runTaskTimer(this, 1L, 1L)
-    getCommand("guilib")?.setExecutor { sender, command, label, args ->
+    getCommand("guilib")?.setExecutor { sender, _, _, _ ->
       if (sender is Player) {
-        TestGUI(sender)
+        var bool1 = true
+        var number1 = 0
+        var number2 = 0
+        CUI(Vec2(-80, -30)) {
+              register(
+                  Element("Test GUI").apply {
+                    width = 20
+                    position = CUIComponent.Position.CENTER
+                  },
+                  Element("v1.0").apply {
+                    width = 0
+                    position = CUIComponent.Position.RIGHT
+                  },
+                  NewLine(),
+                  Element("-".repeat(20)),
+                  NewLine(),
+              )
+              register(
+                  *arrayOf(
+                          Interactable("Toggle", ToggleButton(Ref({ bool1 }, { bool1 = it }))),
+                          Interactable("Number", Number(Ref({ number1 }, { number1 = it }), 0, 10)),
+                          Interactable("Slider", Slider(Ref({ number2 }, { number2 = it }), 0, 10)),
+                      )
+                      .also { it.forEach { it.width = 20 } }
+              )
+            }
+            .open(sender)
       }
       true
     }
@@ -59,13 +71,12 @@ class GuiLib : JavaPlugin(), Listener {
   }
 
   @EventHandler
-  public fun onPlayerLeave(e: org.bukkit.event.player.PlayerQuitEvent) {
-    instances.remove(e.player)
-    locationcash.remove(e.player)
+  private fun onPlayerLeave(e: org.bukkit.event.player.PlayerQuitEvent) {
+    GUI.instances.remove(e.player)
   }
 
   @EventHandler
-  public fun onPlayerInteract(e: PlayerInteractEvent) {
+  private fun onPlayerInteract(e: PlayerInteractEvent) {
     val a = e.getAction()
     when (a) {
       Action.LEFT_CLICK_AIR, Action.LEFT_CLICK_BLOCK ->
@@ -76,27 +87,27 @@ class GuiLib : JavaPlugin(), Listener {
     }
   }
   @EventHandler
-  public fun onPlayerInteractEntity(e: PlayerInteractEntityEvent) {
+  private fun onPlayerInteractEntity(e: PlayerInteractEntityEvent) {
     if (this.onRightClick(e.player)) e.isCancelled = true
   }
   @EventHandler
-  public fun onPrePlayerAttackEntity(e: PrePlayerAttackEntityEvent) {
+  private fun onPrePlayerAttackEntity(e: PrePlayerAttackEntityEvent) {
     if (this.onLeftClick(e.player)) e.isCancelled = true
   }
   @EventHandler
-  public fun onPlayerThrowItem(e: org.bukkit.event.player.PlayerDropItemEvent) {
-    if (instances.containsKey(e.player)) e.isCancelled = true
+  private fun onPlayerThrowItem(e: org.bukkit.event.player.PlayerDropItemEvent) {
+    if (GUI.instances.containsKey(e.player)) e.isCancelled = true
   }
   @EventHandler
-  public fun onInventoryClick(e: org.bukkit.event.inventory.InventoryClickEvent) {
-    if (instances.containsKey(e.whoClicked)) {
+  private fun onInventoryClick(e: org.bukkit.event.inventory.InventoryClickEvent) {
+    if (GUI.instances.containsKey(e.whoClicked)) {
       if (e.slot == 4) {
         e.isCancelled = true
       }
     }
   }
   @EventHandler
-  public fun onPlayerItemHeld(e: org.bukkit.event.player.PlayerItemHeldEvent) {
+  private fun onPlayerItemHeld(e: org.bukkit.event.player.PlayerItemHeldEvent) {
     if (this.onScroll(e.player, e.newSlot - e.previousSlot)) e.isCancelled = true
   }
 
@@ -112,8 +123,8 @@ class GuiLib : JavaPlugin(), Listener {
             }
             .also { it.runTaskLater(this, 1L) }
     )
-    if (instances.containsKey(player)) {
-      instances[player]!!.leftClick()
+    if (GUI.instances.containsKey(player)) {
+      GUI.instances[player]!!.leftClick(player)
       return true
     }
     return false
@@ -130,155 +141,150 @@ class GuiLib : JavaPlugin(), Listener {
             }
             .also { it.runTaskLater(this, 1L) }
     )
-    if (instances.containsKey(player)) {
-      instances[player]!!.rightClick()
+    if (GUI.instances.containsKey(player)) {
+      GUI.instances[player]!!.rightClick(player)
       return true
     }
     return false
   }
-
   private fun onScroll(player: Player, up: Int): Boolean {
-    if (instances.containsKey(player)) {
-      instances[player]!!.scroll(up > 0)
+    if (GUI.instances.containsKey(player)) {
+      if (up > 0) {
+        GUI.instances[player]!!.scrollUp(player)
+      } else if (up < 0) {
+        GUI.instances[player]!!.scrollDown(player)
+      }
       return true
     }
     return false
   }
 
   @EventHandler
-  public fun onPlayerToggleSneak(e: PlayerToggleSneakEvent) {
-    if (instances.containsKey(e.player)) {
-      e.isCancelled = true
-      instances[e.player]!!.quit()
+  private fun onPlayerToggleSneak(e: PlayerToggleSneakEvent) {
+    if (GUI.instances.containsKey(e.player) && e.isSneaking) {
+      GUI.instances[e.player]!!.quit()
     }
   }
 }
 
-abstract class GUI(val player: Player) {
-  val heldItem = player.inventory.getItem(4)
-  val heldSlot = player.inventory.heldItemSlot
-  init {
-    player.inventory.heldItemSlot = 4
-    player.inventory.setItemInMainHand(
-        org.bukkit.inventory.ItemStack(org.bukkit.Material.STICK).apply {
-          itemMeta =
-              itemMeta.apply {
-                displayName(Component.text(" "))
-                setCustomModelData(7201)
-              }
-        }
-    )
+abstract class GUI() {
+  companion object {
+    data class Hotbar(val items: Array<ItemStack?>, val heldSlot: Int) {
+      constructor(
+          player: Player
+      ) : this(Array(9) { player.inventory.getItem(it)?.clone() }, player.inventory.heldItemSlot)
+      fun apply(player: Player) {
+        items.forEachIndexed { i, item -> player.inventory.setItem(i, item) }
+        player.inventory.heldItemSlot = heldSlot
+      }
+    }
+    internal val instances: HashMap<Player, GUI> = HashMap()
+    internal val hotbars: HashMap<Player, Hotbar> = HashMap()
   }
 
-  private fun sendActionBar(text: Component) {
-    player.sendActionBar(text)
+  protected var previous: GUI? = null
+  protected var player: Player? = null
+  public fun open(player: Player) {
+    player.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 1.2f))
+    this.player = player
+    if (GUI.instances.containsKey(player) && GUI.instances[player]?.previous != this) {
+      previous = GUI.instances[player]
+      previous?.player = null
+      GuiLib.instance.logger.info("$previous ${previous?.previous} ${previous?.previous?.previous}")
+    } else {
+      GUI.hotbars[player] = Hotbar(player)
+      player.inventory.heldItemSlot = 4
+      (0..8).forEach {
+        player.inventory.setItem(
+            it,
+            org.bukkit.inventory.ItemStack(org.bukkit.Material.STICK).apply {
+              itemMeta =
+                  itemMeta.apply {
+                    displayName(Component.text(" "))
+                    setCustomModelData(7201)
+                  }
+            }
+        )
+      }
+    }
+    GUI.instances[player] = this
   }
-  public fun update() {
+  public fun quit() {
+    player?.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 1.2f))
+    if (previous != null) {
+      previous?.open(player!!)
+      previous = null
+      player = null
+    } else {
+      GUI.hotbars[player]?.apply(player!!)
+      GUI.instances.remove(player)
+    }
+  }
+  internal fun update() {
+    if (player == null) return
     val title =
         Title.title(
             Component.text(""),
             render(),
             Title.Times.times(Duration.ofMillis(0), Duration.ofMillis(200), Duration.ofMillis(100))
         )
-
-    player.showTitle(title)
+    player?.showTitle(title)
   }
-  abstract fun render(): Component
+  abstract protected fun render(): Component
 
-  abstract fun leftClick()
-  abstract fun rightClick()
-  abstract fun scroll(up: Boolean)
-
-  public fun enter() {
-    player.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 1.2f))
-  }
-  public fun quit() {
-    player.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 1.2f))
-    player.inventory.setItemInMainHand(heldItem)
-    player.inventory.heldItemSlot = heldSlot
-    GuiLib.instances.remove(player)
-  }
+  abstract internal fun leftClick(player: Player)
+  abstract internal fun rightClick(player: Player)
+  abstract internal fun scrollUp(player: Player)
+  abstract internal fun scrollDown(player: Player)
 }
 
-class TestGUI(player: Player) : GUI(player) {
-  var bool1 = true
-  var number1 = 0
-  var builder: Builder =
-      Builder(Vec2(0, 0)).apply {
-        append(CUIComponentElement("|"))
-        append(
-            CUIComponentElement("GUILib!").apply {
-              width = 16
-              position = CUIComponent.Position.LEFT
-            }
-        )
-        append(CUIComponentElement("|"))
-        append(NewLine())
-        append(CUIComponentElement("|"))
-        append(
-            CUIComponentElement("GUILib!").apply {
-              width = 16
-              position = CUIComponent.Position.CENTER
-            }
-        )
-        append(CUIComponentElement("|"))
-        append(NewLine())
-        append(CUIComponentElement("|"))
-        append(
-            CUIComponentElement("GUILib!").apply {
-              width = 16
-              position = CUIComponent.Position.RIGHT
-            }
-        )
-        append(CUIComponentElement("|"))
-        append(NewLine())
-        append(CUIComponentElement("|"))
-        append(
-            CUIComponentElement("Smart & Powerful Library!!").apply {
-              width = 16
-              color = NamedTextColor.GREEN
-              position = CUIComponent.Position.LEFT
-            }
-        )
-        append(CUIComponentElement("|"))
-        append(NewLine())
-        append(CUIComponentElement("|"))
-        append(
-            CUIComponentElement("Smart & Powerful Library!!").apply {
-              width = 16
-              color = NamedTextColor.GREEN
-              position = CUIComponent.Position.CENTER
-            }
-        )
-        append(CUIComponentElement("|"))
-        append(NewLine())
-        append(CUIComponentElement("|"))
-        append(
-            CUIComponentElement("Smart & Powerful Library!!").apply {
-              width = 16
-              color = NamedTextColor.GREEN
-              position = CUIComponent.Position.RIGHT
-            }
-        )
-        append(CUIComponentElement("|"))
-      }
-
+public class CUI(position: Vec2, block: Builder.() -> Builder) : GUI() {
+  var builder: Builder = Builder(position).block()
+  var interactables = builder.components.filterIsInstance<Interactable>()
+  var selected: Int = 0
+    set(value) {
+      field = value
+      interactables.forEach { it.hoverd = false }
+      interactables[value].hoverd = true
+    }
   init {
-    GuiLib.instances[player] = this
+    selected = 0
   }
-
   override fun render(): Component {
     return builder.build()
   }
-
-  override fun leftClick() {}
-
-  override fun rightClick() {}
-
-  override fun scroll(up: Boolean) {}
+  override fun leftClick(player: Player) {
+    interactables[selected].element.onClickLeft(player)
+  }
+  override fun rightClick(player: Player) {
+    interactables[selected].element.onClickRight(player)
+  }
+  override fun scrollUp(player: Player) {
+    scroll(true)
+  }
+  override fun scrollDown(player: Player) {
+    scroll(false)
+  }
+  private fun scroll(up: Boolean) {
+    val range = interactables.size
+    if (!up && selected < range - 1) {
+      player?.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 0.8f))
+      selected++
+    } else if (up && selected > 0) {
+      player?.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 0.8f))
+      selected--
+    } else {
+      player?.playSound(
+          Sound.sound(Key.key("block.note_block.bass"), Sound.Source.MASTER, 0.6f, 0.8f)
+      )
+      return
+    }
+    interactables.forEach { it.hoverd = false }
+    interactables[selected].hoverd = true
+  }
 }
 
-class Ref<T>(private val get: () -> T, private val set: (value: T) -> Unit) {
+internal class Ref<T>(private val get: () -> T, private val set: (value: T) -> Unit) {
   var value: T
     get() = get()
     set(value) = set(value)
