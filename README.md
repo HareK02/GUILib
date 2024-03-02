@@ -7,7 +7,7 @@ PaperMC Plugin that gives you the way to create GUIs with ease.
 ### Gradle
 
 ```kotlin
-import net.hareworks.guilib.GUI
+import net.hareworks.guilib.CUI
 
 var bool1 = true
 var number1 = 0
