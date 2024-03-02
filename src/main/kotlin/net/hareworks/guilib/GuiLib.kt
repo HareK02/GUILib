@@ -213,6 +213,7 @@ public class CUI(position: Vec2, block: Builder.() -> Builder) : GUI() {
   var selected: Int = 0
     set(value) {
       field = value
+      if (interactables.isEmpty()) return
       interactables.forEach { it.hoverd = false }
       interactables[value].hoverd = true
     }
