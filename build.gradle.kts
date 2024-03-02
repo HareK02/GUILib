@@ -39,18 +39,4 @@ bukkit {
       listOf(
           "Hare-K02",
       )
-  commands {
-    register("guilib") {
-      description = "command"
-      usage = "/guilib <subcommand>"
-      permission = "guilib.command"
-      permissionMessage = "§cYou don't have permission to use this command."
-    }
-  }
-  permissions {
-    register("guilib.command") {
-      description = "guilib command"
-      default = BukkitPluginDescription.Permission.Default.OP
-    }
-  }
 }

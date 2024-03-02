@@ -43,7 +43,7 @@ public class Builder(
   fun append(element: CUIComponent): Builder {
     element.appendFor(this)
     return this
-  } 
+  }
   fun append(vararg elements: CUIComponent): Builder {
     elements.forEach { it.appendFor(this) }
     return this
@@ -62,7 +62,7 @@ public class Builder(
   }
 }
 
-interface CUIComponent {
+public interface CUIComponent {
   enum class Position {
     LEFT,
     CENTER,
@@ -87,7 +87,7 @@ interface CUIComponent {
   }
 }
 
-class NewLine : CUIComponent {
+public class NewLine : CUIComponent {
   override var width: Int = 0
   override var height: Int = 1
   override var position: CUIComponent.Position = CUIComponent.Position.LEFT
@@ -100,7 +100,7 @@ class NewLine : CUIComponent {
   }
 }
 
-open class Element : CUIComponent {
+public open class Element : CUIComponent {
   constructor(text: String = "") {
     this.component = Component.text(text)
     length = text.length
@@ -111,6 +111,7 @@ open class Element : CUIComponent {
   }
   var length: Int = 0
   var color: TextColor? = NamedTextColor.WHITE
+
   open var component: TextComponent = Component.text("").color(color)
 
   override var width: Int = length
@@ -151,15 +152,22 @@ open class Element : CUIComponent {
   }
 }
 
-abstract class ActionElement : Element() {
-  abstract fun onClickLeft(player: Player)
-  abstract fun onClickRight(player: Player)
+public open class ActionElement(
+    private val left: (Player) -> Unit = {},
+    private val right: (Player) -> Unit = {},
+) : Element() {
+  internal open fun onClickLeft(player: Player) {
+    left(player)
+  }
+  internal open fun onClickRight(player: Player) {
+    right(player)
+  }
 }
 
-open class ToggleButton(
+public open class ToggleButton(
     value: Ref<Boolean>,
 ) : ActionElement() {
-  val ref: Ref<Boolean> = value
+  private val ref: Ref<Boolean> = value
   override fun onClickLeft(player: Player) {
     ref.value = !ref.value
   }
@@ -172,7 +180,7 @@ open class ToggleButton(
     set(_) {}
 }
 
-open class Number(
+public open class Number(
     val value: Ref<Int>,
     var min: Int,
     var max: Int,
@@ -194,7 +202,7 @@ open class Number(
     set(_) {}
 }
 
-open class Slider(
+public open class Slider(
     value: Ref<Int>,
     min: Int,
     max: Int,
@@ -211,7 +219,7 @@ open class Slider(
     set(_) {}
 }
 
-open class Anchor(
+public open class Anchor(
     val text: String,
     val page: GUI,
 ) : ActionElement() {
@@ -227,12 +235,27 @@ open class Anchor(
   }
 }
 
-class Interactable(
+public open class Quit(
+    val text: String,
+) : ActionElement() {
+  override var component: TextComponent
+    get() = Component.text("$text").color(color)
+    set(_) {}
+
+  override fun onClickLeft(player: Player) {
+    GUI.instances[player]?.quit()
+  }
+  override fun onClickRight(player: Player) {
+    GUI.instances[player]?.quit()
+  }
+}
+
+public class Interactable(
     label: String,
     component: ActionElement,
 ) : CUIComponent {
-  val label: String = label
-  val element: ActionElement = component
+  private val label: String = label
+  private val element: ActionElement = component
 
   override var width: Int = 0
     set(value) {
@@ -244,7 +267,14 @@ class Interactable(
   init {
     element.position = CUIComponent.Position.RIGHT
   }
-  var hoverd = false
+  internal var hoverd = false
+
+  public fun onClickLeft(player: Player) {
+    element.onClickLeft(player)
+  }
+  public fun onClickRight(player: Player) {
+    element.onClickRight(player)
+  }
 
   override fun appendFor(builder: Builder) {
     builder.apply {

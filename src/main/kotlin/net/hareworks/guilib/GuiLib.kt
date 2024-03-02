@@ -33,39 +33,8 @@ class GuiLib : JavaPlugin(), Listener {
     instance = this
     server.pluginManager.registerEvents(this, this)
     ticker.runTaskTimer(this, 1L, 1L)
-    getCommand("guilib")?.setExecutor { sender, _, _, _ ->
-      if (sender is Player) {
-        var bool1 = true
-        var number1 = 0
-        var number2 = 0
-        CUI(Vec2(-80, -30)) {
-              register(
-                  Element("Test GUI").apply {
-                    width = 20
-                    position = CUIComponent.Position.CENTER
-                  },
-                  Element("v1.0").apply {
-                    width = 0
-                    position = CUIComponent.Position.RIGHT
-                  },
-                  NewLine(),
-                  Element("-".repeat(20)),
-                  NewLine(),
-              )
-              register(
-                  *arrayOf(
-                          Interactable("Toggle", ToggleButton(Ref({ bool1 }, { bool1 = it }))),
-                          Interactable("Number", Number(Ref({ number1 }, { number1 = it }), 0, 10)),
-                          Interactable("Slider", Slider(Ref({ number2 }, { number2 = it }), 0, 10)),
-                      )
-                      .also { it.forEach { it.width = 20 } }
-              )
-            }
-            .open(sender)
-      }
-      true
-    }
   }
+
   override fun onDisable() {
     ticker.cancel()
   }
@@ -254,10 +223,10 @@ public class CUI(position: Vec2, block: Builder.() -> Builder) : GUI() {
     return builder.build()
   }
   override fun leftClick(player: Player) {
-    interactables[selected].element.onClickLeft(player)
+    interactables[selected].onClickLeft(player)
   }
   override fun rightClick(player: Player) {
-    interactables[selected].element.onClickRight(player)
+    interactables[selected].onClickRight(player)
   }
   override fun scrollUp(player: Player) {
     scroll(true)
@@ -279,12 +248,10 @@ public class CUI(position: Vec2, block: Builder.() -> Builder) : GUI() {
       )
       return
     }
-    interactables.forEach { it.hoverd = false }
-    interactables[selected].hoverd = true
   }
 }
 
-internal class Ref<T>(private val get: () -> T, private val set: (value: T) -> Unit) {
+public class Ref<T>(private val get: () -> T, private val set: (value: T) -> Unit) {
   var value: T
     get() = get()
     set(value) = set(value)
