@@ -10,7 +10,7 @@ import org.checkerframework.checker.units.qual.min
 
 internal data class Block(val length: Int, val lines: Int)
 
-public data class Vec2(val x: Int, val y: Int) {
+data class Vec2(val x: Int, val y: Int) {
   operator fun plus(other: Vec2): Vec2 {
     return Vec2(x + other.x, y + other.y)
   }
@@ -19,7 +19,7 @@ public data class Vec2(val x: Int, val y: Int) {
   }
 }
 
-public class Builder(
+class Builder(
     pos: Vec2 = Vec2(0, 0),
 ) {
   val start_position = Vec2(pos.x, -pos.y - 2)
@@ -62,7 +62,7 @@ public class Builder(
   }
 }
 
-public interface CUIComponent {
+interface CUIComponent {
   enum class Position {
     LEFT,
     CENTER,
@@ -87,7 +87,7 @@ public interface CUIComponent {
   }
 }
 
-public class NewLine : CUIComponent {
+class NewLine : CUIComponent {
   override var width: Int = 0
   override var height: Int = 1
   override var position: CUIComponent.Position = CUIComponent.Position.LEFT
@@ -100,7 +100,7 @@ public class NewLine : CUIComponent {
   }
 }
 
-public open class Element : CUIComponent {
+open class Element : CUIComponent {
   constructor(text: String = "") {
     this.component = Component.text(text)
     length = text.length
@@ -152,7 +152,7 @@ public open class Element : CUIComponent {
   }
 }
 
-public open class ActionElement(
+open class ActionElement(
     private val left: (Player) -> Unit = {},
     private val right: (Player) -> Unit = {},
 ) : Element() {
@@ -164,7 +164,7 @@ public open class ActionElement(
   }
 }
 
-public open class ToggleButton(
+open class ToggleButton(
     value: Ref<Boolean>,
 ) : ActionElement() {
   private val ref: Ref<Boolean> = value
@@ -180,7 +180,7 @@ public open class ToggleButton(
     set(_) {}
 }
 
-public open class Number(
+open class Number(
     val value: Ref<Int>,
     var min: Int,
     var max: Int,
@@ -202,7 +202,7 @@ public open class Number(
     set(_) {}
 }
 
-public open class Slider(
+open class Slider(
     value: Ref<Int>,
     min: Int,
     max: Int,
@@ -219,7 +219,7 @@ public open class Slider(
     set(_) {}
 }
 
-public open class Anchor(
+open class Anchor(
     val text: String,
     val page: GUI,
 ) : ActionElement() {
@@ -235,7 +235,7 @@ public open class Anchor(
   }
 }
 
-public open class Quit(
+open class Quit(
     val text: String,
 ) : ActionElement() {
   override var component: TextComponent
@@ -243,14 +243,14 @@ public open class Quit(
     set(_) {}
 
   override fun onClickLeft(player: Player) {
-    GUI.instances[player]?.quit()
+    GUI.get(player)?.quit()
   }
   override fun onClickRight(player: Player) {
-    GUI.instances[player]?.quit()
+    GUI.get(player)?.quit()
   }
 }
 
-public class Interactable(
+class Interactable(
     label: String,
     component: ActionElement,
 ) : CUIComponent {
@@ -269,17 +269,17 @@ public class Interactable(
   }
   internal var hoverd = false
 
-  public fun onClickLeft(player: Player) {
+  fun onClickLeft(player: Player) {
     element.onClickLeft(player)
   }
-  public fun onClickRight(player: Player) {
+  fun onClickRight(player: Player) {
     element.onClickRight(player)
   }
 
   override fun appendFor(builder: Builder) {
     builder.apply {
       append(
-          Element((if (hoverd) " " else "") + label).apply {
+          Element((if (hoverd) ">" else "") + label).apply {
             this.width = label.length + 1
             position = CUIComponent.Position.LEFT
           },

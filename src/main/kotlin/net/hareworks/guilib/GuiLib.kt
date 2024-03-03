@@ -26,7 +26,7 @@ class GuiLib : JavaPlugin(), Listener {
   private val ticker =
       object : BukkitRunnable() {
         override fun run() {
-          GUI.instances.forEach { (_, gui) -> gui.update() }
+          GUI.instances.forEach { it.update() }
         }
       }
   override fun onEnable() {
@@ -36,12 +36,13 @@ class GuiLib : JavaPlugin(), Listener {
   }
 
   override fun onDisable() {
+    GUI.instances.forEach { it.forceQuit() }
     ticker.cancel()
   }
 
   @EventHandler
   private fun onPlayerLeave(e: org.bukkit.event.player.PlayerQuitEvent) {
-    GUI.instances.remove(e.player)
+    GUI.forceQuit(e.player)
   }
 
   @EventHandler
@@ -65,11 +66,11 @@ class GuiLib : JavaPlugin(), Listener {
   }
   @EventHandler
   private fun onPlayerThrowItem(e: org.bukkit.event.player.PlayerDropItemEvent) {
-    if (GUI.instances.containsKey(e.player)) e.isCancelled = true
+    if (GUI.has(e.player)) e.isCancelled = true
   }
   @EventHandler
   private fun onInventoryClick(e: org.bukkit.event.inventory.InventoryClickEvent) {
-    if (GUI.instances.containsKey(e.whoClicked)) {
+    if (GUI.has(e.whoClicked as Player)) {
       if (e.slot == 4) {
         e.isCancelled = true
       }
@@ -92,11 +93,10 @@ class GuiLib : JavaPlugin(), Listener {
             }
             .also { it.runTaskLater(this, 1L) }
     )
-    if (GUI.instances.containsKey(player)) {
-      GUI.instances[player]!!.leftClick(player)
-      return true
-    }
-    return false
+    val gui = GUI.get(player)
+    if (gui == null) return false
+    gui.leftClick(player)
+    return true
   }
   private val rmap = HashMap<Player, BukkitRunnable>()
   private fun onRightClick(player: Player): Boolean {
@@ -110,18 +110,18 @@ class GuiLib : JavaPlugin(), Listener {
             }
             .also { it.runTaskLater(this, 1L) }
     )
-    if (GUI.instances.containsKey(player)) {
-      GUI.instances[player]!!.rightClick(player)
-      return true
-    }
-    return false
+    val gui = GUI.get(player)
+    if (gui == null) return false
+    gui.rightClick(player)
+    return true
   }
   private fun onScroll(player: Player, up: Int): Boolean {
-    if (GUI.instances.containsKey(player)) {
+    val gui = GUI.get(player)
+    if (gui != null) {
       if (up > 0) {
-        GUI.instances[player]!!.scrollUp(player)
+        gui.scrollUp(player)
       } else if (up < 0) {
-        GUI.instances[player]!!.scrollDown(player)
+        gui.scrollDown(player)
       }
       return true
     }
@@ -130,8 +130,9 @@ class GuiLib : JavaPlugin(), Listener {
 
   @EventHandler
   private fun onPlayerToggleSneak(e: PlayerToggleSneakEvent) {
-    if (GUI.instances.containsKey(e.player) && e.isSneaking) {
-      GUI.instances[e.player]!!.quit()
+    val gui = GUI.get(e.player)
+    if (gui != null && e.isSneaking) {
+      gui.quit()
     }
   }
 }
@@ -147,19 +148,43 @@ abstract class GUI() {
         player.inventory.heldItemSlot = heldSlot
       }
     }
-    internal val instances: HashMap<Player, GUI> = HashMap()
+    internal val instances: MutableList<GUI> = ArrayList()
     internal val hotbars: HashMap<Player, Hotbar> = HashMap()
+    fun forceQuit(player: Player) {
+      if (instances.firstNotNullOf { it.player } == player) {
+        hotbars[player]?.apply(player)
+        hotbars.remove(player)
+        instances.filter { it.player == player }.forEach { instances.remove(it) }
+      }
+    }
+    fun has(player: Player): Boolean {
+      return instances.any { it.player == player }
+    }
+    fun get(player: Player): GUI? {
+      return instances.firstOrNull { it.player == player }
+    }
   }
 
-  protected var previous: GUI? = null
   protected var player: Player? = null
-  public fun open(player: Player) {
+  protected var enabled: Boolean = true
+
+  protected var previous: GUI? = null
+
+  fun open(player: Player) {
+    this.enabled = true
     player.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 1.2f))
-    this.player = player
-    if (GUI.instances.containsKey(player) && GUI.instances[player]?.previous != this) {
-      previous = GUI.instances[player]
-      previous?.player = null
-      GuiLib.instance.logger.info("$previous ${previous?.previous} ${previous?.previous?.previous}")
+    if (GUI.has(player)) {
+      GuiLib.instance.logger.info("player has gui")
+      val opened = GUI.get(player)!!
+      if (opened.previous == this) {
+        GuiLib.instance.logger.info("previous == this")
+        opened.previous = null
+      } else {
+        GuiLib.instance.logger.info("store previous")
+        this.previous = opened
+      }
+      opened.enabled = false
+      GUI.instances.remove(opened)
     } else {
       GUI.hotbars[player] = Hotbar(player)
       player.inventory.heldItemSlot = 4
@@ -176,28 +201,38 @@ abstract class GUI() {
         )
       }
     }
-    GUI.instances[player] = this
+    this.player = player
+    GUI.instances.add(this)
   }
-  public fun quit() {
+  fun quit() {
+    if (player == null) return
+    this.enabled = false
     player?.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 1.2f))
     if (previous != null) {
+      GuiLib.instance.logger.info("quit → previous open")
       previous?.open(player!!)
       previous = null
-      player = null
     } else {
       GUI.hotbars[player]?.apply(player!!)
-      GUI.instances.remove(player)
+      GUI.hotbars.remove(player)
+      GUI.instances.remove(this)
     }
   }
-  internal fun update() {
+  fun forceQuit() {
     if (player == null) return
-    val title =
+    GUI.hotbars[player]?.apply(player!!)
+    GUI.hotbars.remove(player)
+    GUI.instances.remove(this)
+  }
+  internal fun update() {
+    if (!enabled) return
+    player?.showTitle(
         Title.title(
             Component.text(""),
             render(),
             Title.Times.times(Duration.ofMillis(0), Duration.ofMillis(200), Duration.ofMillis(100))
         )
-    player?.showTitle(title)
+    )
   }
   abstract protected fun render(): Component
 
@@ -207,7 +242,7 @@ abstract class GUI() {
   abstract internal fun scrollDown(player: Player)
 }
 
-public class CUI(position: Vec2, block: Builder.() -> Builder) : GUI() {
+class CUI(position: Vec2, block: Builder.() -> Builder) : GUI() {
   var builder: Builder = Builder(position).block()
   var interactables = builder.components.filterIsInstance<Interactable>()
   var selected: Int = 0
@@ -230,12 +265,12 @@ public class CUI(position: Vec2, block: Builder.() -> Builder) : GUI() {
     interactables[selected].onClickRight(player)
   }
   override fun scrollUp(player: Player) {
-    scroll(true)
+    scroll(true, player)
   }
   override fun scrollDown(player: Player) {
-    scroll(false)
+    scroll(false, player)
   }
-  private fun scroll(up: Boolean) {
+  private fun scroll(up: Boolean, player: Player? = null) {
     val range = interactables.size
     if (!up && selected < range - 1) {
       player?.playSound(Sound.sound(Key.key("ui.button.click"), Sound.Source.MASTER, 0.6f, 0.8f))
@@ -252,7 +287,7 @@ public class CUI(position: Vec2, block: Builder.() -> Builder) : GUI() {
   }
 }
 
-public class Ref<T>(private val get: () -> T, private val set: (value: T) -> Unit) {
+class Ref<T>(private val get: () -> T, private val set: (value: T) -> Unit) {
   var value: T
     get() = get()
     set(value) = set(value)
