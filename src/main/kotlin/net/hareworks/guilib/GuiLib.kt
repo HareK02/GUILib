@@ -151,10 +151,10 @@ abstract class GUI() {
     internal val instances: MutableList<GUI> = ArrayList()
     internal val hotbars: HashMap<Player, Hotbar> = HashMap()
     fun forceQuit(player: Player) {
-      if (instances.firstNotNullOf { it.player } == player) {
+      instances.firstOrNull { it.player == player }?.let {
         hotbars[player]?.apply(player)
         hotbars.remove(player)
-        instances.filter { it.player == player }.forEach { instances.remove(it) }
+        instances.remove(it)
       }
     }
     fun has(player: Player): Boolean {
