@@ -85,6 +85,19 @@ interface CUIComponent {
     return (if (positive) "\uDB00\uDC01" else "\uDAFF\uDFFF") +
         String(Character.toChars(0x50000 + if (positive) 2401 else -2401))
   }
+  fun textLength(text: String): Int {
+    var length = 0
+    for (c in text) {
+      length +=
+          when (Character.UnicodeBlock.of(c)) {
+            Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS,
+            Character.UnicodeBlock.HIRAGANA,
+            Character.UnicodeBlock.KATAKANA -> 2
+            else -> 1
+          }
+    }
+    return length
+  }
 }
 
 class NewLine : CUIComponent {
@@ -119,7 +132,7 @@ open class Element : CUIComponent {
   override var position: CUIComponent.Position = CUIComponent.Position.LEFT
 
   override fun appendFor(builder: Builder) {
-    val disp = (width - component.content().length)
+    val disp = (width - textLength(component.content()))
     val odd = (disp % 2 == 1)
     val overflown = disp < 0
     if (position == CUIComponent.Position.CENTER)
@@ -224,7 +237,7 @@ open class Anchor(
     val page: GUI,
 ) : ActionElement() {
   override var component: TextComponent
-    get() = Component.text("<$text>").color(color)
+    get() = Component.text("$text").color(color)
     set(_) {}
 
   override fun onClickLeft(player: Player) {
